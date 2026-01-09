@@ -1,10 +1,10 @@
-import React, { Component, ReactNode } from 'react';
+import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
 // Fixed: Make children optional to avoid 'Property children is missing' error in some usages
 interface ErrorBoundaryProps {
-  children?: ReactNode;
+  children?: React.ReactNode;
 }
 
 interface ErrorBoundaryState {
@@ -13,7 +13,7 @@ interface ErrorBoundaryState {
 }
 
 // Error Boundary Sederhana untuk menangkap crash
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   // Fixed: Explicitly declare state property to satisfy TypeScript
   public state: ErrorBoundaryState = { hasError: false, error: null };
 
