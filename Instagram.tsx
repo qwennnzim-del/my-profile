@@ -4,6 +4,7 @@ import { Plus, Camera, Heart, MessageCircle, Share2, Bookmark, Trash2, Loader2, 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db, storage } from './firebaseConfig';
+import { compressImage } from './utils/imageHelpers';
 
 interface InstagramProps {
   isAdmin: boolean;
@@ -85,8 +86,11 @@ export const Instagram: React.FC<InstagramProps> = ({ isAdmin }) => {
 
     setIsUploading(true);
     try {
+      // Compress Image dulu
+      const compressedBlob = await compressImage(file);
+
       const storageRef = ref(storage, `uploads/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
+      await uploadBytes(storageRef, compressedBlob);
       const downloadURL = await getDownloadURL(storageRef);
 
       await addDoc(collection(db, 'posts'), {
@@ -99,6 +103,7 @@ export const Instagram: React.FC<InstagramProps> = ({ isAdmin }) => {
       alert("Gagal upload.");
     } finally {
       setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -129,8 +134,9 @@ export const Instagram: React.FC<InstagramProps> = ({ isAdmin }) => {
 
     setIsSavingProfile(true);
     try {
+      const compressedBlob = await compressImage(file);
       const storageRef = ref(storage, `avatar/profile_pic_${Date.now()}`);
-      await uploadBytes(storageRef, file);
+      await uploadBytes(storageRef, compressedBlob);
       const url = await getDownloadURL(storageRef);
       setTempProfile(prev => ({ ...prev, avatarUrl: url }));
     } catch (e) {
@@ -324,7 +330,7 @@ export const Instagram: React.FC<InstagramProps> = ({ isAdmin }) => {
               className="w-full flex items-center justify-center gap-2 bg-white text-slate-900 px-6 py-3 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors"
             >
               {isUploading ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />} 
-              {isUploading ? 'Mengupload...' : 'Upload Foto Baru'}
+              {isUploading ? 'Mengupload & Kompres...' : 'Upload Foto Baru'}
             </button>
           </div>
         </div>
@@ -358,7 +364,7 @@ export const Instagram: React.FC<InstagramProps> = ({ isAdmin }) => {
               </div>
               
               <div className="aspect-square bg-slate-100 overflow-hidden relative">
-                 <img src={post.imageUrl} alt="Post" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                 <img src={post.imageUrl} alt="Post" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" />
               </div>
 
               <div className="p-4">

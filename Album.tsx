@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Plus, Trash2, Edit2, Check, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db, storage } from './firebaseConfig';
+import { compressImage } from './utils/imageHelpers';
 
 interface AlbumProps {
   isAdmin: boolean;
@@ -20,6 +20,7 @@ interface AlbumPhoto {
 export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
   const [photos, setPhotos] = useState<AlbumPhoto[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0); // Total file yang sedang diproses
   const [editingId, setEditingId] = useState<string | null>(null);
   
   // State untuk form edit
@@ -41,26 +42,51 @@ export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
   }, []);
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
     setIsUploading(true);
-    try {
-      const storageRef = ref(storage, `albums/${Date.now()}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+    setUploadProgress(0);
+    const totalFiles = files.length;
 
-      await addDoc(collection(db, 'albums'), {
-        imageUrl: url,
-        title: "Judul Momen",
-        description: "Tulis deskripsi kenangan di sini...",
-        timestamp: new Date()
+    try {
+      // Proses upload secara paralel menggunakan Promise.all
+      // Explicitly type file as File to avoid 'unknown' type issues with Array.from
+      const uploadPromises = Array.from(files).map(async (file: File, index: number) => {
+        try {
+          // 1. Kompresi Gambar
+          const compressedBlob = await compressImage(file);
+          
+          // 2. Upload ke Firebase Storage
+          const storageRef = ref(storage, `albums/${Date.now()}_${index}_${file.name}`);
+          await uploadBytes(storageRef, compressedBlob);
+          const url = await getDownloadURL(storageRef);
+
+          // 3. Simpan Metadata ke Firestore
+          await addDoc(collection(db, 'albums'), {
+            imageUrl: url,
+            title: "Momen Baru",
+            description: "Belum ada deskripsi.",
+            timestamp: new Date()
+          });
+
+          // Update progress (hanya visual sederhana)
+          setUploadProgress(prev => prev + 1);
+          
+        } catch (err) {
+          console.error(`Gagal upload file ${file.name}:`, err);
+        }
       });
+
+      await Promise.all(uploadPromises);
+
     } catch (error) {
       console.error(error);
-      alert("Gagal upload album.");
+      alert("Terjadi kesalahan saat upload album.");
     } finally {
       setIsUploading(false);
+      // Reset input agar bisa pilih file yang sama lagi kalau mau
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -104,22 +130,28 @@ export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
 
       {/* Admin Action */}
       {isAdmin && (
-        <div className="flex justify-center mb-12">
+        <div className="flex flex-col items-center justify-center mb-12 gap-2">
           <input 
             type="file" 
             ref={fileInputRef} 
             className="hidden" 
             accept="image/*"
+            multiple // Izinkan pilih banyak file
             onChange={handleUpload}
           />
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="bg-slate-900 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20 active:scale-95"
+            className="bg-slate-900 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isUploading ? <Loader2 className="animate-spin" /> : <Plus />}
-            Tambah Koleksi
+            {isUploading ? `Mengupload...` : 'Tambah Banyak Foto'}
           </button>
+          {isUploading && (
+             <p className="text-xs text-slate-400 font-medium animate-pulse">
+               Mohon tunggu, sedang mengompres & upload foto...
+             </p>
+          )}
         </div>
       )}
 
@@ -136,13 +168,13 @@ export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
               
               {/* Image */}
               <div className="rounded-2xl overflow-hidden mb-4 relative">
-                <img src={photo.imageUrl} alt={photo.title} className="w-full object-cover transform group-hover:scale-105 transition-transform duration-700" />
+                <img src={photo.imageUrl} alt={photo.title} className="w-full object-cover transform group-hover:scale-105 transition-transform duration-700" loading="lazy" />
                 
                 {isAdmin && (
                   <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => handleDelete(photo.id)}
-                      className="bg-white/90 p-2 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-colors"
+                      className="bg-white/90 p-2 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-colors shadow-sm"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -153,12 +185,13 @@ export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
               {/* Content */}
               <div className="px-2 pb-2">
                 {editingId === photo.id ? (
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-3 animate-in fade-in duration-300">
                     <input 
                       className="text-lg font-bold font-serif text-slate-900 border-b border-slate-300 outline-none pb-1 bg-transparent"
                       value={editTitle}
                       onChange={(e) => setEditTitle(e.target.value)}
                       placeholder="Judul"
+                      autoFocus
                     />
                     <textarea 
                       className="text-sm text-slate-600 border border-slate-200 rounded-lg p-2 outline-none bg-slate-50"
@@ -179,7 +212,7 @@ export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
                         {photo.title}
                       </h3>
                       {isAdmin && (
-                        <button onClick={() => startEditing(photo)} className="text-slate-300 hover:text-blue-500 transition-colors">
+                        <button onClick={() => startEditing(photo)} className="text-slate-300 hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100">
                           <Edit2 size={14} />
                         </button>
                       )}
