@@ -25,6 +25,7 @@ interface UserProfile {
   postsCount: string;
   followersCount: string;
   followingCount: string;
+  pronouns?: string; // Field baru untuk kata ganti
 }
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -34,7 +35,8 @@ const DEFAULT_PROFILE: UserProfile = {
   avatarUrl: "", // Kosong berarti pakai inisial
   postsCount: "0",
   followersCount: "454",
-  followingCount: "102"
+  followingCount: "102",
+  pronouns: "she/her" // Default value
 };
 
 export const Instagram: React.FC<InstagramProps> = ({ isAdmin }) => {
@@ -71,8 +73,11 @@ export const Instagram: React.FC<InstagramProps> = ({ isAdmin }) => {
   useEffect(() => {
     const unsubProfile = onSnapshot(doc(db, 'settings', 'profile'), (doc) => {
       if (doc.exists()) {
-        setProfile(doc.data() as UserProfile);
-        setTempProfile(doc.data() as UserProfile);
+        const data = doc.data();
+        // Merge dengan default untuk handle field baru (pronouns) jika belum ada di DB
+        const mergedProfile = { ...DEFAULT_PROFILE, ...data } as UserProfile;
+        setProfile(mergedProfile);
+        setTempProfile(mergedProfile);
       }
     });
     return () => unsubProfile;
@@ -210,6 +215,17 @@ export const Instagram: React.FC<InstagramProps> = ({ isAdmin }) => {
                 />
               </div>
 
+              {/* Input Pronouns Baru */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-400 uppercase">Kata Ganti (Pronouns)</label>
+                <input 
+                  value={tempProfile.pronouns || ''} 
+                  onChange={e => setTempProfile({...tempProfile, pronouns: e.target.value})}
+                  className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none text-sm"
+                  placeholder="Contoh: she/her"
+                />
+              </div>
+
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-400 uppercase">Bio</label>
                 <textarea 
@@ -282,7 +298,10 @@ export const Instagram: React.FC<InstagramProps> = ({ isAdmin }) => {
              <h2 className="text-2xl md:text-3xl font-light text-slate-900 mb-2">{profile.username}</h2>
              <div className="flex items-center justify-center md:justify-start gap-3">
                <span className="font-semibold text-slate-900">{profile.displayName}</span>
-               <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full font-medium">she/her</span>
+               {/* Tampilkan Pronouns Dinamis */}
+               <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full font-medium">
+                 {profile.pronouns || "she/her"}
+               </span>
              </div>
            </div>
 

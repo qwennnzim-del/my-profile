@@ -28,13 +28,13 @@ const App: React.FC = () => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
 
-  // Realtime Listener untuk Notifikasi
+  // 1. Realtime Listener untuk Notifikasi
   useEffect(() => {
     try {
       const q = query(
         collection(db, 'notifications'), 
         orderBy('timestamp', 'desc'), 
-        limit(10)
+        limit(20) // Naikkan limit biar kelihatan history visitor
       );
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -51,6 +51,47 @@ const App: React.FC = () => {
     } catch (error) {
       console.error("Error connect firebase:", error);
     }
+  }, []);
+
+  // 2. Visitor Tracker (Analytics Sederhana)
+  useEffect(() => {
+    const trackVisitor = async () => {
+      // Cek Session Storage agar tidak spam notif setiap user refresh halaman
+      // Notif hanya dikirim sekali per sesi browser (saat tab ditutup, sesi hilang)
+      const hasVisited = sessionStorage.getItem('zenith_visitor_logged');
+
+      if (!hasVisited) {
+        try {
+          // Deteksi Device Sederhana
+          const width = window.innerWidth;
+          const deviceType = width <= 768 ? "HP 📱" : "Laptop/PC 💻";
+          
+          // Deteksi Browser (Optional, basic detection)
+          const userAgent = navigator.userAgent;
+          let browserInfo = "";
+          if (userAgent.includes("Chrome")) browserInfo = "Chrome";
+          else if (userAgent.includes("Firefox")) browserInfo = "Firefox";
+          else if (userAgent.includes("Safari")) browserInfo = "Safari";
+          else browserInfo = "Browser Lain";
+
+          // Kirim ke Firebase
+          await addDoc(collection(db, 'notifications'), {
+            message: `Ada tamu baru yang mampir lihat portofolio via ${deviceType} (${browserInfo}). 👀`,
+            time: 'Baru saja',
+            timestamp: new Date(),
+            read: false,
+            type: 'visitor_log'
+          });
+
+          // Tandai sesi ini sudah tercatat
+          sessionStorage.setItem('zenith_visitor_logged', 'true');
+        } catch (error) {
+          console.error("Gagal mencatat pengunjung:", error);
+        }
+      }
+    };
+
+    trackVisitor();
   }, []);
 
   const handleFinishQuiz = async (message: string) => {
