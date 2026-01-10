@@ -32,6 +32,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   componentDidCatch(error: any, errorInfo: any) {
+    // Log error asli ke console agar developer bisa debug objectnya
     console.error("Zenith App Crashed:", error, errorInfo);
   }
 
@@ -39,26 +40,39 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     if (this.state.hasError) {
       // Safe error message extraction
       let errorMessage = "Unknown error";
+      const err = this.state.error;
+
       try {
-        if (this.state.error instanceof Error) {
-            errorMessage = this.state.error.message;
-            if (this.state.error.stack) {
-                errorMessage += "\n" + this.state.error.stack;
-            }
-        } else if (typeof this.state.error === 'string') {
-            errorMessage = this.state.error;
+        if (err instanceof Error) {
+            errorMessage = err.message;
+            // Stack trace optional, bisa bikin UI berantakan kalau terlalu panjang
+            // if (err.stack) errorMessage += "\n" + err.stack;
+        } else if (typeof err === 'string') {
+            errorMessage = err;
         } else {
-            errorMessage = JSON.stringify(this.state.error, null, 2);
+            // AVOID JSON.stringify for unknown objects to prevent "Converting circular structure to JSON"
+            // Firebase errors are often circular.
+            errorMessage = String(err); 
+            if (errorMessage === '[object Object]') {
+                // Try to extract some useful info safely if possible, or just keep generic
+                try {
+                    // Coba ambil code atau message jika ada (common in Firebase)
+                    if (err.code) errorMessage = `Error Code: ${err.code}`;
+                    if (err.message) errorMessage += ` - ${err.message}`;
+                } catch (e) {
+                    errorMessage = "An unexpected error occurred (Object details in console).";
+                }
+            }
         }
       } catch (e) {
-        errorMessage = "Error object could not be displayed (Circular reference or similar). Check console.";
+        errorMessage = "Error details could not be displayed. Check browser console.";
       }
 
       return (
         <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'sans-serif', color: '#333' }}>
           <h1 style={{ fontSize: '24px', marginBottom: '10px' }}>Something went wrong.</h1>
           <p style={{ color: '#666' }}>Aplikasi mengalami crash. Cek console browser untuk detailnya.</p>
-          <pre style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px', overflow: 'auto', textAlign: 'left', marginTop: '20px', fontSize: '12px', maxHeight: '400px' }}>
+          <pre style={{ background: '#f5f5f5', padding: '15px', borderRadius: '8px', overflow: 'auto', textAlign: 'left', marginTop: '20px', fontSize: '12px', maxHeight: '400px', whiteSpace: 'pre-wrap' }}>
             {errorMessage}
           </pre>
           <button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 20px', background: '#000', color: '#fff', border: 'none', borderRadius: '50px', cursor: 'pointer' }}>

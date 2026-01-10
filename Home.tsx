@@ -24,7 +24,8 @@ export const Home: React.FC<HomeProps> = ({ onNavigate }) => {
         });
       }
     });
-    return () => unsub;
+    // FIX: Execute the unsubscribe function returned by onSnapshot
+    return () => unsub();
   }, []);
 
   return (
