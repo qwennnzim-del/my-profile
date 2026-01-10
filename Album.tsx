@@ -1,9 +1,9 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Plus, Trash2, Edit2, Check, X, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db, storage } from './firebaseConfig';
-import { compressImage } from './utils/imageHelpers';
 
 interface AlbumProps {
   isAdmin: boolean;
@@ -20,7 +20,7 @@ interface AlbumPhoto {
 export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
   const [photos, setPhotos] = useState<AlbumPhoto[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0); // Total file yang sedang diproses
+  const [uploadProgress, setUploadProgress] = useState(0); 
   const [editingId, setEditingId] = useState<string | null>(null);
   
   // State untuk form edit
@@ -47,22 +47,17 @@ export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
 
     setIsUploading(true);
     setUploadProgress(0);
-    const totalFiles = files.length;
 
     try {
-      // Proses upload secara paralel menggunakan Promise.all
-      // Explicitly type file as File to avoid 'unknown' type issues with Array.from
+      // Proses upload secara paralel
       const uploadPromises = Array.from(files).map(async (file: File, index: number) => {
         try {
-          // 1. Kompresi Gambar
-          const compressedBlob = await compressImage(file);
-          
-          // 2. Upload ke Firebase Storage
+          // DIRECT UPLOAD (INSTANT)
           const storageRef = ref(storage, `albums/${Date.now()}_${index}_${file.name}`);
-          await uploadBytes(storageRef, compressedBlob);
+          await uploadBytes(storageRef, file);
           const url = await getDownloadURL(storageRef);
 
-          // 3. Simpan Metadata ke Firestore
+          // Simpan Metadata ke Firestore
           await addDoc(collection(db, 'albums'), {
             imageUrl: url,
             title: "Momen Baru",
@@ -70,7 +65,6 @@ export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
             timestamp: new Date()
           });
 
-          // Update progress (hanya visual sederhana)
           setUploadProgress(prev => prev + 1);
           
         } catch (err) {
@@ -85,7 +79,6 @@ export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
       alert("Terjadi kesalahan saat upload album.");
     } finally {
       setIsUploading(false);
-      // Reset input agar bisa pilih file yang sama lagi kalau mau
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -136,7 +129,7 @@ export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
             ref={fileInputRef} 
             className="hidden" 
             accept="image/*"
-            multiple // Izinkan pilih banyak file
+            multiple 
             onChange={handleUpload}
           />
           <button 
@@ -149,13 +142,13 @@ export const Album: React.FC<AlbumProps> = ({ isAdmin }) => {
           </button>
           {isUploading && (
              <p className="text-xs text-slate-400 font-medium animate-pulse">
-               Mohon tunggu, sedang mengompres & upload foto...
+               Sedang mengupload ke cloud...
              </p>
           )}
         </div>
       )}
 
-      {/* Gallery Grid (Masonry-ish via CSS Columns) */}
+      {/* Gallery Grid */}
       {photos.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
           <ImageIcon className="text-slate-300 w-16 h-16 mb-4" />
